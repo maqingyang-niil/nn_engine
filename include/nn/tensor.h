@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <vector>
 #include <string>
 #include <memory>
@@ -31,7 +31,7 @@ namespace nn {
 		//拷贝赋值
 		Tensor& operator=(const Tensor& other);
 		//移动赋值
-		Tensor& operator=(Tensor&& other);
+		Tensor& operator=(Tensor&& other) noexcept;
 
 		//静态工厂方法
 		
@@ -64,7 +64,7 @@ namespace nn {
 		//维度
 		size_t ndim()const;
 
-		// 获取总元素数
+		//获取总元素数
 		size_t size() const;
 
 		// 是否为空
@@ -159,7 +159,6 @@ namespace nn {
 		Tensor abs() const;
 
 		// 比较操作（返回 0/1 的 Tensor）
-
 		Tensor operator>(float scalar) const;
 		Tensor operator<(float scalar) const;
 		Tensor operator>=(float scalar) const;
@@ -196,17 +195,17 @@ namespace nn {
 			const std::vector<size_t>& b
 		);
 
+		// 将索引映射到广播后的实际位置
+		static size_t broadcast_index(
+			const std::vector<size_t>& index,
+			const std::vector<size_t>& shape
+		);
+
 		// 广播后执行逐元素运算
 		static Tensor elementwise_op(
 			const Tensor& a,
 			const Tensor& b,
 			std::function<float(float, float)> op
-		);
-
-		// 将索引映射到广播后的实际位置
-		static size_t broadcast_index(
-			const std::vector<size_t>& index,
-			const std::vector<size_t>& shape
 		);
 
 	};
