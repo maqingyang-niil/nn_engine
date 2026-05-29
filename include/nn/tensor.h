@@ -14,6 +14,7 @@
 #include <sstream>
 
 namespace nn {
+	class Autograd;
 	class Tensor
 	{
 	public:
@@ -174,6 +175,27 @@ namespace nn {
 		// 流输出
 		friend std::ostream& operator<<(std::ostream& os, const Tensor& t);
 
+		// 反向传播相关
+		//获取是否需要计算梯度
+		bool requires_grad() const;
+
+		// 设置是否需要计算梯度
+		void set_requires_grad(bool val);
+
+		// 获取梯度 Tensor
+		const std::shared_ptr<Tensor>& grad() const;
+
+		//设置梯度 Tensor
+		void set_grad(const std::shared_ptr<Tensor>& g);
+
+		// 获取生成该 Tensor 的 Autograd 函数
+		const std::shared_ptr<Autograd>& grad_fn() const;
+
+		// 设置生成该 Tensor 的 Autograd 函数
+		void set_grad_fn(const std::shared_ptr<Autograd>& fn);
+
+		void backward();
+
 
 		~Tensor()=default;
 
@@ -182,6 +204,10 @@ namespace nn {
 		std::vector<size_t> shape_;
 		std::vector<size_t> strides_;
 		size_t offset_ = 0;
+
+		bool requires_grad_ = false;
+		std::shared_ptr<std::shared_ptr<Tensor>> grad_;
+		std::shared_ptr<Autograd> grad_fn_;
 
 		// 根据 shape 计算 strides
 		void compute_strides();

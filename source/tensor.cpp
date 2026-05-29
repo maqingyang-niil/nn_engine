@@ -1,4 +1,6 @@
 #include "nn/tensor.h"
+#include "nn/autograd.h"
+#include <unordered_set>
 
 namespace nn {
 	
@@ -6,12 +8,14 @@ namespace nn {
 		:data_(std::make_shared<std::vector<float>>())
 		, shape_({})
 		, strides_({})
-		, offset_(0){}
+		, offset_(0)
+	    , grad_(std::make_shared<std::shared_ptr<Tensor>>(nullptr)){}
 
 	//从shape构造
 	Tensor::Tensor(const std::vector<size_t>& shape)
 		:shape_(shape)
-		, offset_(0) {
+		, offset_(0) 
+		, grad_(std::make_shared<std::shared_ptr<Tensor>>(nullptr)) {
 		size_t total = 1;
 		for (auto s : shape)total *= s;
 		data_ = std::make_shared<std::vector<float>>(total, 0.0f);
@@ -20,7 +24,8 @@ namespace nn {
 
 	Tensor::Tensor(const std::vector<size_t>& shape, const std::vector<float>& data)
 		:shape_(shape)
-		, offset_(0) {
+		, offset_(0) 
+		, grad_(std::make_shared<std::shared_ptr<Tensor>>(nullptr)) {
 		size_t total = 1;
 		for (auto s : shape_)total *= s;
 		if (data.size() != total) {
@@ -41,7 +46,10 @@ namespace nn {
 		:data_(other.data_)
 		, shape_(other.shape_)
 		, strides_(other.strides_)
-		, offset_(other.offset_){ }
+		, offset_(other.offset_)
+	    , requires_grad_(other.requires_grad_)
+	    , grad_(other.grad_)
+	    , grad_fn_(other.grad_fn_){ }
 
 	//移动构造
 	Tensor::Tensor(Tensor&& other) noexcept
@@ -290,13 +298,26 @@ namespace nn {
 	//逐元素运算tensor tensor
 
 	Tensor Tensor::operator+(const Tensor& other) const {
-		return elementwise_op(*this, other, [](float a, float b) {return a + b;});
+		Tensor result = elementwise_op(*this, other, [](float a, float b) {return a + b;});
+		
+		if (requires_grad_ || other.requires_grad_) {
+			auto fn = std::make_shared<AddBackward>(*this, other);
+			result.set_grad_fn(fn);
+			result.set_requires_grad(true);
+		}
+		return result;
 	}
 	Tensor Tensor::operator-(const Tensor& other) const {
 		return elementwise_op(*this, other, [](float a, float b) {return a - b;});
 	}
 	Tensor Tensor::operator*(const Tensor& other) const {
-		return elementwise_op(*this, other, [](float a, float b) {return a * b;});
+		Tensor result = elementwise_op(*this, other, [](float a, float b) {return a * b;});
+		if (requires_grad_ || other.requires_grad_) {
+			auto fn = std::make_shared<MulBackward>(*this, other);
+			result.set_grad_fn(fn);
+			result.set_requires_grad(true);
+		}
+		return result;
 	}
 	Tensor Tensor::operator/(const Tensor& other) const {
 		return elementwise_op(*this, other, [](float a, float b) {return a / b;});
@@ -670,7 +691,74 @@ namespace nn {
 		return *data_;
 	}
 
+	// 反向传播相关
+		//获取是否需要计算梯度
+	bool Tensor::requires_grad() const {
+		return requires_grad_;
+	}
 
+	// 设置是否需要计算梯度
+	void Tensor::set_requires_grad(bool val) {
+		requires_grad_ = val;
+	}
+
+	// 获取梯度 Tensor
+	const std::shared_ptr<Tensor>& Tensor::grad() const {
+		return *grad_;
+	}
+
+	//设置梯度 Tensor
+	void Tensor::set_grad(const std::shared_ptr<Tensor>& g) {
+		*grad_ = g;
+	}
+
+	// 获取生成该 Tensor 的 Autograd 函数
+	const std::shared_ptr<Autograd>& Tensor::grad_fn() const {
+		return grad_fn_;
+	}
+
+	// 设置生成该 Tensor 的 Autograd 函数
+	void Tensor::set_grad_fn(const std::shared_ptr<Autograd>& fn) {
+		grad_fn_ = fn;
+	}
+
+	void Tensor::backward() {
+		set_grad(std::make_shared<Tensor>(Tensor::ones(shape_)));
+
+		std::vector<Tensor*> topo;
+		std::unordered_set<Tensor*> visited;
+
+		std::function<void(Tensor*)> build_topo = [&](Tensor* t) {
+			if (visited.count(t)) return;
+			visited.insert(t);
+			if (t->grad_fn_) {
+				for (auto& inp : t->grad_fn_->inputs()) {
+					build_topo(const_cast<Tensor*>(&inp));
+				}
+			}
+			topo.push_back(t);
+
+		};
+
+		build_topo(this);
+		std::reverse(topo.begin(), topo.end());
+
+		for (auto* t : topo) {
+			if (!t->grad_fn_ || !*t->grad_) continue;
+			auto grads = t->grad_fn_->backward(**t->grad_);
+			auto& inps = t->grad_fn_->inputs();
+			for (size_t i = 0;i < inps.size();i++) {
+				if (!inps[i].requires_grad_) continue;
+				auto& inp = const_cast<Tensor&>(inps[i]);
+				if (*inp.grad_) {
+					inp.set_grad(std::make_shared<Tensor>(**inp.grad_ + grads[i]));
+				}
+				else {
+					inp.set_grad(std::make_shared<Tensor>(grads[i]));
+				}
+			}
+		}
+	}
 
 	//计算步长
 	void Tensor::compute_strides() {
