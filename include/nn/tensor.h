@@ -205,6 +205,7 @@ namespace nn {
 		std::vector<size_t> strides_;
 		size_t offset_ = 0;
 
+		//梯度计算
 		bool requires_grad_ = false;
 		std::shared_ptr<std::shared_ptr<Tensor>> grad_;
 		std::shared_ptr<Autograd> grad_fn_;

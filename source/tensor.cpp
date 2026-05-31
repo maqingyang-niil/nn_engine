@@ -56,7 +56,10 @@ namespace nn {
 		:data_(std::move(other.data_))
 		, shape_(std::move(other.shape_))
 		, strides_(std::move(other.strides_))
-		, offset_(other.offset_) {
+		, offset_(other.offset_) 
+	    , requires_grad_(other.requires_grad_)
+	    , grad_(std::move(other.grad_))
+	    , grad_fn_(std::move(other.grad_fn_)){
 		other.offset_ = 0;//对象处于安全状态的显示处理
 	}
 
@@ -67,6 +70,10 @@ namespace nn {
 			shape_ = other.shape_;
 			strides_ = other.strides_;
 			offset_ = other.offset_;
+			requires_grad_ = other.requires_grad_;
+			grad_ = other.grad_;
+			grad_fn_ = other.grad_fn_;
+
 		}
 		return *this;
 	}
@@ -78,6 +85,9 @@ namespace nn {
 			shape_ = std::move(other.shape_);
 			strides_ = std::move(other.strides_);
 			offset_ = other.offset_;
+			requires_grad_ = other.requires_grad_;
+			grad_ = std::move(other.grad_);
+			grad_fn_ = std::move(other.grad_fn_);
 			other.offset_ = 0;
 		}
 		return *this;
@@ -308,7 +318,14 @@ namespace nn {
 		return result;
 	}
 	Tensor Tensor::operator-(const Tensor& other) const {
-		return elementwise_op(*this, other, [](float a, float b) {return a - b;});
+		Tensor result = elementwise_op(*this, other, [](float a, float b) {return a - b;});
+
+		if (requires_grad_ || other.requires_grad_) {
+			auto fn = std::make_shared<SubBackward>(*this, other);
+			result.set_grad_fn(fn);
+			result.set_requires_grad(true);
+		}
+		return result;
 	}
 	Tensor Tensor::operator*(const Tensor& other) const {
 		Tensor result = elementwise_op(*this, other, [](float a, float b) {return a * b;});
@@ -320,23 +337,41 @@ namespace nn {
 		return result;
 	}
 	Tensor Tensor::operator/(const Tensor& other) const {
-		return elementwise_op(*this, other, [](float a, float b) {return a / b;});
+		Tensor result = elementwise_op(*this, other, [](float a, float b) {return a / b;});
+
+		if (requires_grad_ || other.requires_grad_) {
+			auto fn = std::make_shared<DivBackward>(*this, other);
+			result.set_grad_fn(fn);
+			result.set_requires_grad(true);
+		}
+		return result;
 	}
 
 	// 取负
 	Tensor Tensor::operator-() const {
 		Tensor result(shape_);
-		for (size_t i = 0;i < size();i++) {
-			(*result.data_)[i] = -(*data_)[offset_ + i];
+		for (size_t i = 0; i < size(); i++) {
+			(*result.data_)[i] = -(*data_)[offset_ + i]; 
 		}
+		if (requires_grad_) {
+			auto fn = std::make_shared<NegBackward>(*this);
+			result.set_grad_fn(fn);
+			result.set_requires_grad(true);
+		}
+
 		return result;
 	}
 
-	//逐元素运算: tensor&标量
+	//逐元素运算: tensor&标量(标量在右侧)
 	Tensor Tensor::operator+(float scalar) const {
 		Tensor result(shape_);
 		for (size_t i = 0;i < size();i++) {
 			(*result.data_)[i] = (*data_)[offset_ + i]+scalar;
+		}
+		if (requires_grad_) {
+			auto fn = std::make_shared<AddScalarBackward>(scalar, *this);
+			result.set_grad_fn(fn);
+			result.set_requires_grad(true);
 		}
 		return result;
 	}
@@ -345,6 +380,11 @@ namespace nn {
 		for (size_t i = 0;i < size();i++) {
 			(*result.data_)[i] = (*data_)[offset_ + i] - scalar;
 		}
+		if (requires_grad_) {
+			auto fn = std::make_shared<LSubScalarBackward>(scalar, *this);
+			result.set_grad_fn(fn);
+			result.set_requires_grad(true);
+		}
 		return result;
 	}
 	Tensor Tensor::operator*(float scalar) const {
@@ -352,12 +392,22 @@ namespace nn {
 		for (size_t i = 0;i < size();i++) {
 			(*result.data_)[i] = (*data_)[offset_ + i] * scalar;
 		}
+		if (requires_grad_) {
+			auto fn = std::make_shared<MulScalarBackward>(scalar, *this);
+			result.set_grad_fn(fn);
+			result.set_requires_grad(true);
+		}
 		return result;
 	}
 	Tensor Tensor::operator/(float scalar) const {
 		Tensor result(shape_);
 		for (size_t i = 0;i < size();i++) {
 			(*result.data_)[i] = (*data_)[offset_ + i] / scalar;
+		}
+		if (requires_grad_) {
+			auto fn = std::make_shared<LDivScalarBackward>(scalar, *this);
+			result.set_grad_fn(fn);
+			result.set_requires_grad(true);
 		}
 		return result;
 	}
@@ -371,6 +421,11 @@ namespace nn {
 		for (size_t i = 0; i < t.size(); ++i) {
 			(*result.data_)[i] = scalar - (*t.data_)[t.offset_ + i];
 		}
+		if (t.requires_grad()) {
+			auto fn = std::make_shared<RSubScalarBackward>(scalar, t);
+			result.set_grad_fn(fn);
+			result.set_requires_grad(true);
+		}
 		return result;
 	}
 	Tensor operator*(float scalar, const Tensor& t) {
@@ -381,10 +436,15 @@ namespace nn {
 		for (size_t i = 0; i < t.size(); ++i) {
 			(*result.data_)[i] = scalar / (*t.data_)[t.offset_ + i];
 		}
+		if (t.requires_grad()) {
+			auto fn = std::make_shared<RDivScalarBackward>(scalar, t);
+			result.set_grad_fn(fn);
+			result.set_requires_grad(true);
+		}
 		return result;
 	}
 
-	// 矩阵乘法
+	// 矩阵乘法(参数Tensor在右边)
 	Tensor Tensor::matmul(const Tensor& other) const {
 		if (ndim() != 2 || other.ndim() != 2) {
 			throw std::invalid_argument("matmul requires 2D tensors");
@@ -410,6 +470,11 @@ namespace nn {
 				result.at({ i, j }) = sum;
 			}
 		}
+		if (requires_grad_ || other.requires_grad_) {
+			auto fn = std::make_shared<MatMulBackward>(*this, other);
+			result.set_grad_fn(fn);
+			result.set_requires_grad(true);
+		}
 		return result;
 	}
 
@@ -419,7 +484,13 @@ namespace nn {
 		for (size_t i = 0;i < size();i++) {
 			s += (*data_)[offset_ + i];
 		}
-		return Tensor({ 1 }, { s });
+		Tensor result({ 1 }, { s });
+		if (requires_grad_) {
+			auto fn = std::make_shared<SumBackward>(*this);
+			result.set_grad_fn(fn);
+			result.set_requires_grad(true);
+		}
+		return result;
 	}
 	Tensor Tensor::mean() const {
 		float s = sum().at({ 0 });
@@ -581,6 +652,11 @@ namespace nn {
 		for (size_t i = 0;i < size();i++) {
 			(*result.data_)[i] = std::exp((*data_)[offset_ + i]);
 		}
+		if (requires_grad_) {
+			auto fn = std::make_shared<ExpBackward>(*this, result);
+			result.set_grad_fn(fn);
+			result.set_requires_grad(true);
+		}
 		return result;
 	}
 
@@ -589,6 +665,11 @@ namespace nn {
 		for (size_t i = 0;i < size();i++) {
 			(*result.data_)[i] = std::log((*data_)[offset_ + i]);
 		}
+		if (requires_grad_) {
+			auto fn = std::make_shared<LogBackward>(*this);
+			result.set_grad_fn(fn);
+			result.set_requires_grad(true);
+		}
 		return result;
 	}
 
@@ -596,6 +677,11 @@ namespace nn {
 		Tensor result(shape_);
 		for (size_t i = 0;i < size();i++) {
 			(*result.data_)[i] = std::pow((*data_)[offset_ + i],exponent);
+		}
+		if (requires_grad_) {
+			auto fn = std::make_shared<PowBackward>(exponent,*this);
+			result.set_grad_fn(fn);
+			result.set_requires_grad(true);
 		}
 		return result;
 	}
@@ -737,7 +823,6 @@ namespace nn {
 				}
 			}
 			topo.push_back(t);
-
 		};
 
 		build_topo(this);
@@ -745,8 +830,8 @@ namespace nn {
 
 		for (auto* t : topo) {
 			if (!t->grad_fn_ || !*t->grad_) continue;
-			auto grads = t->grad_fn_->backward(**t->grad_);
-			auto& inps = t->grad_fn_->inputs();
+			auto grads = t->grad_fn_->backward(**t->grad_);//得到对应位置的梯度
+			auto& inps = t->grad_fn_->inputs();//得到创造出这个Tensor的Tensors
 			for (size_t i = 0;i < inps.size();i++) {
 				if (!inps[i].requires_grad_) continue;
 				auto& inp = const_cast<Tensor&>(inps[i]);
