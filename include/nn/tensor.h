@@ -15,8 +15,9 @@
 
 namespace nn {
 	class Autograd;
-	class Tensor
-	{
+	class Module;
+	class SGD;
+	class Tensor{
 	public:
 		//默认构造
 		Tensor();

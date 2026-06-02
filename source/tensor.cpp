@@ -3,7 +3,7 @@
 #include <unordered_set>
 
 namespace nn {
-	
+	//构造
 	Tensor::Tensor()
 		:data_(std::make_shared<std::vector<float>>())
 		, shape_({})
@@ -21,7 +21,7 @@ namespace nn {
 		data_ = std::make_shared<std::vector<float>>(total, 0.0f);
 		compute_strides();
 	}
-
+	//从shape和元素构造
 	Tensor::Tensor(const std::vector<size_t>& shape, const std::vector<float>& data)
 		:shape_(shape)
 		, offset_(0) 
@@ -38,6 +38,7 @@ namespace nn {
 		compute_strides();
 	}
 
+	//委托构造（花括号包围数据）
 	Tensor::Tensor(const std::vector<size_t>& shape, const std::initializer_list<float>& data)
 		:Tensor(shape, std::vector<float>(data)) {}
 
@@ -93,19 +94,19 @@ namespace nn {
 		return *this;
 	}
 
-	//全零tensor
+	//生成全零tensor
 	Tensor Tensor::zeros(const std::vector<size_t>& shape) {
 		return Tensor(shape);
 	}
 
-	//全一
+	//生成全一Tensor
 	Tensor Tensor::ones(const std::vector<size_t>& shape) {
 		Tensor t(shape);
 		t.fill(1.0f);
 		return t;
 	}
 
-	//指定位填充
+	//所有元素填充指定值
 	Tensor Tensor::full(const std::vector<size_t>& shape, float value) {
 		Tensor t(shape);
 		t.fill(value);
@@ -504,7 +505,7 @@ namespace nn {
 		return Tensor({ 1 }, { m });
 	}
 
-	// 沿指定轴归约（keepdim 表示是否保留该维度）
+	// 沿指定轴归约（keepdim = true 表示保留该维度）
 	// axis是维度，沿着那个维度把值合并，那个维度就消失了
 	Tensor Tensor::sum(size_t axis, bool keepdim) const {
 		if (axis >= ndim()) {

@@ -1,0 +1,37 @@
+#pragma once
+#include "tensor.h"
+#include "module.h"
+#include <cmath>
+
+namespace nn {
+	class Linear :public Module {
+	public:
+		Linear(size_t in_features, size_t out_features);
+		Tensor forward(const Tensor& input)override;
+		std::vector<Tensor*> parameters()override;
+	private:
+		Tensor W_;
+		Tensor b_;
+		size_t in_features_;
+		size_t out_features_;
+	};
+
+	class ReLU :public Module {
+	public:
+		Tensor forward(const Tensor& input)override;
+	};
+
+	class Sigmoid :public Module {
+	public:
+		Tensor forward(const Tensor& input)override;
+	};
+
+	class Sequential :public Module {
+	public:
+		Sequential(std::vector<std::shared_ptr<Module>> layers);
+		Tensor forward(const Tensor& input)override;
+		std::vector<Tensor*> parameters() override;
+	private:
+		std::vector<std::shared_ptr<Module>> layers_;
+	};
+}
