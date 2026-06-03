@@ -46,6 +46,21 @@ namespace nn {
 		}
 		return result;
 	}
+	//Softmax
+	Tensor Softmax::forward(const Tensor& input) {
+		//为了数值安全
+		Tensor max_val = input.max(1, true);
+		Tensor shifted = input - max_val;
+		Tensor e = shifted.exp();
+		Tensor sum_e = e.sum(1, true);
+		Tensor result = e / sum_e;
+		if (input.requires_grad()) {
+			auto fn = std::make_shared<SoftmaxBackward>(input, result);
+			result.set_grad_fn(fn);
+			result.set_requires_grad(true);
+		}
+		return result;
+	}
 	//Sequential
 	Sequential::Sequential(std::vector<std::shared_ptr<Module>> layers) :layers_(layers) {}
 	Tensor Sequential::forward(const Tensor& input) {
@@ -55,7 +70,7 @@ namespace nn {
 		}
 		return x;
 	}
-    
+
 	std::vector<Tensor*> Sequential::parameters() {
 		std::vector<Tensor*> params;
 		for (auto& layer : layers_) {

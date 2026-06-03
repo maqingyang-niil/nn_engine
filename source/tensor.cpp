@@ -1,7 +1,7 @@
 #include "nn/tensor.h"
 #include "nn/autograd.h"
 #include <unordered_set>
-
+#include <cblas.h>
 namespace nn {
 	//构造
 	Tensor::Tensor()
@@ -446,6 +446,7 @@ namespace nn {
 	}
 
 	// 矩阵乘法(参数Tensor在右边)
+
 	Tensor Tensor::matmul(const Tensor& other) const {
 		if (ndim() != 2 || other.ndim() != 2) {
 			throw std::invalid_argument("matmul requires 2D tensors");
@@ -453,6 +454,7 @@ namespace nn {
 		size_t M = shape_[0];
 		size_t K = shape_[1];
 		size_t N = other.shape_[1];
+
 		if (K != other.shape_[0]) {
 			throw std::invalid_argument(
 				"matmul shape mismatch: (" + std::to_string(M) + "," +
@@ -461,16 +463,24 @@ namespace nn {
 			);
 		}
 
-		Tensor result({ M,N });
-		for (size_t i = 0; i < M; ++i) {
-			for (size_t j = 0; j < N; ++j) {
-				float sum = 0.0f;
-				for (size_t k = 0; k < K; ++k) {
-					sum += at({ i, k }) * other.at({ k, j });
-				}
-				result.at({ i, j }) = sum;
-			}
-		}
+		Tensor result({ M, N });
+
+		// 判断是否转置：行优先的 strides 应该是 [cols, 1]
+		bool a_trans = (strides_[0] == 1 && strides_[1] > 1);
+		bool b_trans = (other.strides_[0] == 1 && other.strides_[1] > 1);
+
+		CBLAS_TRANSPOSE transA = a_trans ? CblasTrans : CblasNoTrans;
+		CBLAS_TRANSPOSE transB = b_trans ? CblasTrans : CblasNoTrans;
+
+		// lda/ldb 是原始数据在内存中每行的宽度
+		int lda = a_trans ? static_cast<int>(M) : static_cast<int>(K);
+		int ldb = b_trans ? static_cast<int>(K) : static_cast<int>(N);
+
+		cblas_sgemm(CblasRowMajor, transA, transB,
+			static_cast<int>(M), static_cast<int>(N), static_cast<int>(K),
+			1.0f, data_ptr(), lda, other.data_ptr(), ldb,
+			0.0f, result.data_ptr(), static_cast<int>(N));
+
 		if (requires_grad_ || other.requires_grad_) {
 			auto fn = std::make_shared<MatMulBackward>(*this, other);
 			result.set_grad_fn(fn);
@@ -809,6 +819,7 @@ namespace nn {
 		grad_fn_ = fn;
 	}
 
+	//反向传播
 	void Tensor::backward() {
 		set_grad(std::make_shared<Tensor>(Tensor::ones(shape_)));
 
@@ -844,6 +855,37 @@ namespace nn {
 				}
 			}
 		}
+	}
+
+	//切片
+	Tensor Tensor::slice(size_t start, size_t end) const {
+		if (start >= end || end > shape_[0]) {
+			throw std::out_of_range("Slice out of bounds");
+		}
+		size_t rows = end - start;
+		size_t row_size = size() / shape_[0];
+
+		std::vector<size_t> new_shape = shape_;
+		new_shape[0] = rows;
+
+		Tensor result(new_shape);
+		const float* src = data_ptr() + start * row_size;
+		for (size_t i = 0;i < rows * row_size;i++) {
+			result.data_ptr()[i] = src[i];
+		}
+		return result;
+	}
+
+	/*
+	mnist 相关
+	*/
+	Tensor Tensor::one_hot(const std::vector<int>& labels, size_t num_classes) {
+		size_t n = labels.size();
+		Tensor result = Tensor::zeros({ n, num_classes });
+		for (size_t i = 0; i < n; i++) {
+			result.at({ i, static_cast<size_t>(labels[i]) }) = 1.0f;
+		}
+		return result;
 	}
 
 	//计算步长

@@ -4,6 +4,7 @@
 #include <cmath>
 
 namespace nn {
+	//线性
 	class Linear :public Module {
 	public:
 		Linear(size_t in_features, size_t out_features);
@@ -15,17 +16,22 @@ namespace nn {
 		size_t in_features_;
 		size_t out_features_;
 	};
-
+	//ReLU
 	class ReLU :public Module {
 	public:
 		Tensor forward(const Tensor& input)override;
 	};
-
+	//Sigmoid
 	class Sigmoid :public Module {
 	public:
 		Tensor forward(const Tensor& input)override;
 	};
-
+	//Softmax
+	class Softmax :public Module {
+	public:
+		Tensor forward(const Tensor& input)override;
+	};
+	//Sequential
 	class Sequential :public Module {
 	public:
 		Sequential(std::vector<std::shared_ptr<Module>> layers);
@@ -34,4 +40,5 @@ namespace nn {
 	private:
 		std::vector<std::shared_ptr<Module>> layers_;
 	};
+	
 }

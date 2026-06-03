@@ -49,7 +49,7 @@ namespace nn {
 		}
 	};
 	
-	//加法求导
+	//乘法求导
 	class MulBackward :public Autograd {
 	public:
 		MulBackward(const Tensor& a, const Tensor& b) {
@@ -59,8 +59,8 @@ namespace nn {
 
 		std::vector<Tensor> backward(const Tensor& grad_output) override {
 			return {
-				grad_output * saved_inputs[1],
-				grad_output * saved_inputs[0]
+				reduce_to_shape(grad_output * saved_inputs[1],saved_inputs[0].shape()),
+				reduce_to_shape(grad_output * saved_inputs[0],saved_inputs[1].shape())
 			};
 		}
 	};
@@ -74,9 +74,9 @@ namespace nn {
 		}
 
 		std::vector<Tensor> backward(const Tensor& grad_output)override {
-			return{
-				grad_output,
-				-grad_output
+			return {
+				reduce_to_shape(grad_output,saved_inputs[0].shape()),
+				reduce_to_shape(-grad_output,saved_inputs[1].shape())
 			};
 		}
 	};
@@ -102,9 +102,9 @@ namespace nn {
 		}
 
 		std::vector<Tensor> backward(const Tensor& grad_output)override {
-			return{
-				grad_output / saved_inputs[1],
-				-1 * grad_output * saved_inputs[0] / saved_inputs[1] / saved_inputs[1]
+			return {
+				reduce_to_shape(grad_output / saved_inputs[1],saved_inputs[0].shape()),
+				reduce_to_shape(-grad_output * saved_inputs[0] / saved_inputs[1] / saved_inputs[1],saved_inputs[1].shape())
 			};
 		}
 	};
@@ -276,6 +276,19 @@ namespace nn {
 		}
 		std::vector<Tensor> backward(const Tensor& grad_output)override {
 			return { grad_output * output_ * (1.0f - output_) };
+		}
+	};
+
+	class SoftmaxBackward :public Autograd {
+	public:
+		Tensor output_;
+		SoftmaxBackward(const Tensor& input, const Tensor& output) :output_(output) {
+			saved_inputs.push_back(input);
+		}
+		std::vector<Tensor> backward(const Tensor& grad_output)override {
+			Tensor sg = grad_output * output_;
+			Tensor sum_sg = sg.sum(1, true);
+			return { output_ * (grad_output - sum_sg) };
 		}
 	};
 }

@@ -17,6 +17,7 @@ namespace nn {
 	class Autograd;
 	class Module;
 	class SGD;
+	class Adam;
 	class Tensor{
 	public:
 		//默认构造
@@ -195,8 +196,17 @@ namespace nn {
 		// 设置生成该 Tensor 的 Autograd 函数
 		void set_grad_fn(const std::shared_ptr<Autograd>& fn);
 
+		//反向传播
 		void backward();
 
+		//切片
+		Tensor slice(size_t start, size_t end) const;
+
+		
+		/*
+		mnist相关
+		*/
+		static Tensor one_hot(const std::vector<int>& labels, size_t num_classes);
 
 		~Tensor()=default;
 

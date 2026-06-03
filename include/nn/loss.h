@@ -7,4 +7,9 @@ namespace nn {
 	public:
 		Tensor forward(const Tensor& pred, const Tensor& target);
 	};
+
+	class CrossEntropyLoss {
+	public:
+		Tensor forward(const Tensor& pred, const Tensor& target);
+	};
 }

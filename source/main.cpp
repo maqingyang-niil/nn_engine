@@ -2,53 +2,89 @@
 #include "nn/layer.h"
 #include "nn/loss.h"
 #include "nn/optimizer.h"
+#include "nn/mnist.h"
 #include <iostream>
-#include <cmath>
 
 int main() {
-    // 训练数据：y = x^2，x 从 -2 到 2，共 20 个点
-    std::vector<float> x_data, y_data;
-    for (int i = 0; i < 20; i++) {
-        float x = -2.0f + i * 0.2f;
-        x_data.push_back(x);
-        y_data.push_back(x * x);
-    }
-    nn::Tensor x({ 20, 1 }, x_data);
-    nn::Tensor y({ 20, 1 }, y_data);
+    // ========== 加载数据 ==========
+    std::cout << "Loading data...\n";
+    nn::Tensor train_images = nn::load_mnist_images("C:/Users/86157/Desktop/nn_engine/data/train-images.idx3-ubyte");
+    std::vector<int> train_labels = nn::load_mnist_labels("C:/Users/86157/Desktop/nn_engine/data/train-labels.idx1-ubyte");
+    nn::Tensor train_targets = nn::Tensor::one_hot(train_labels, 10);
 
-    // 网络：Linear(1,16) → ReLU → Linear(16,8) → ReLU → Linear(8,1)
+    nn::Tensor test_images = nn::load_mnist_images("C:/Users/86157/Desktop/nn_engine/data/t10k-images.idx3-ubyte");
+    std::vector<int> test_labels = nn::load_mnist_labels("C:/Users/86157/Desktop/nn_engine/data/t10k-labels.idx1-ubyte");
+
+    std::cout << "Train: " << train_images.shape()[0] << " images\n";
+    std::cout << "Test:  " << test_images.shape()[0] << " images\n";
+
+    // ========== 网络结构 ==========
     nn::Sequential model({
-        std::make_shared<nn::Linear>(1, 16),
+        std::make_shared<nn::Linear>(784, 128),
         std::make_shared<nn::ReLU>(),
-        std::make_shared<nn::Linear>(16, 8),
+        std::make_shared<nn::Linear>(128, 64),
         std::make_shared<nn::ReLU>(),
-        std::make_shared<nn::Linear>(8, 1)
+        std::make_shared<nn::Linear>(64, 10),
+        std::make_shared<nn::Softmax>()
         });
 
-    nn::MSELoss criterion;
-    nn::SGD optimizer(model.parameters(), 0.01f);
+    nn::CrossEntropyLoss criterion;
+    nn::Adam optimizer(model.parameters(), 0.001f);
 
-    // 训练 2000 轮
-    for (int epoch = 0; epoch < 6000; epoch++) {
-        optimizer.zero_grad();
-        nn::Tensor pred = model.forward(x);
-        nn::Tensor loss = criterion.forward(pred, y);
-        loss.backward();
-        optimizer.step();
+    // ========== 训练 ==========
+    size_t batch_size = 64;
+    size_t num_batches = train_images.shape()[0] / batch_size;
+    int epochs = 5;
 
-        if (epoch % 200 == 0) {
-            std::cout << "Epoch " << epoch
-                << "  Loss: " << loss.data_ptr()[0] << "\n";
+    for (int epoch = 0; epoch < epochs; epoch++) {
+        float total_loss = 0.0f;
+
+        for (size_t b = 0; b < num_batches; b++) {
+            size_t start = b * batch_size;
+            size_t end = start + batch_size;
+            nn::Tensor x_batch = train_images.slice(start, end);
+            nn::Tensor y_batch = train_targets.slice(start, end);
+
+            optimizer.zero_grad();
+            nn::Tensor pred = model.forward(x_batch);
+            nn::Tensor loss = criterion.forward(pred, y_batch);
+            loss.backward();
+            optimizer.step();
+
+            total_loss += loss.data_ptr()[0];
+
+            if (b % 100 == 0) {
+                std::cout << "Epoch " << epoch + 1
+                    << " Batch " << b << "/" << num_batches
+                    << " Loss: " << loss.data_ptr()[0] << "\n";
+            }
         }
+
+        std::cout << "Epoch " << epoch + 1
+            << " Avg Loss: " << total_loss / num_batches << "\n";
+
+        // ========== 测试准确率 ==========
+        int correct = 0;
+        size_t test_batches = test_images.shape()[0] / batch_size;
+
+        for (size_t b = 0; b < test_batches; b++) {
+            size_t start = b * batch_size;
+            size_t end = start + batch_size;
+            nn::Tensor x_batch = test_images.slice(start, end);
+
+            nn::Tensor pred = model.forward(x_batch);
+            nn::Tensor pred_labels = pred.argmax(1);
+
+            for (size_t j = 0; j < batch_size; j++) {
+                if (static_cast<int>(pred_labels.data_ptr()[j]) == test_labels[start + j]) {
+                    correct++;
+                }
+            }
+        }
+
+        float accuracy = static_cast<float>(correct) / (test_batches * batch_size) * 100.0f;
+        std::cout << "Accuracy: " << accuracy << "%\n\n";
     }
 
-    // 测试几个点
-    std::cout << "\nTest:\n";
-    for (float val : {-1.5f, 0.0f, 1.0f, 1.5f}) {
-        nn::Tensor test({ 1, 1 }, { val });
-        nn::Tensor out = model.forward(test);
-        std::cout << "x=" << val
-            << "  pred=" << out.data_ptr()[0]
-            << "  true=" << val * val << "\n";
-    }
+    return 0;
 }
