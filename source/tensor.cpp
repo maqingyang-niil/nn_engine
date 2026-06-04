@@ -504,10 +504,12 @@ namespace nn {
 		}
 		return result;
 	}
+
 	Tensor Tensor::mean() const {
 		float s = sum().at({ 0 });
 		return Tensor({ 1 }, { s / static_cast<float>(size()) });
 	}
+
 	Tensor Tensor::max() const {
 		float m = (*data_)[offset_];
 		for (size_t i = 0;i < size();i++) {
@@ -664,7 +666,7 @@ namespace nn {
 		for (size_t i = 0;i < size();i++) {
 			(*result.data_)[i] = std::exp((*data_)[offset_ + i]);
 		}
-		if (requires_grad_) {
+		if (requires_grad_&&grad_enabled_) {
 			auto fn = std::make_shared<ExpBackward>(*this, result);
 			result.set_grad_fn(fn);
 			result.set_requires_grad(true);
@@ -677,7 +679,7 @@ namespace nn {
 		for (size_t i = 0;i < size();i++) {
 			(*result.data_)[i] = std::log((*data_)[offset_ + i]);
 		}
-		if (requires_grad_) {
+		if (requires_grad_&&grad_enabled_) {
 			auto fn = std::make_shared<LogBackward>(*this);
 			result.set_grad_fn(fn);
 			result.set_requires_grad(true);
@@ -690,7 +692,7 @@ namespace nn {
 		for (size_t i = 0;i < size();i++) {
 			(*result.data_)[i] = std::pow((*data_)[offset_ + i],exponent);
 		}
-		if (requires_grad_) {
+		if (requires_grad_&&grad_enabled_) {
 			auto fn = std::make_shared<PowBackward>(exponent,*this);
 			result.set_grad_fn(fn);
 			result.set_requires_grad(true);
@@ -983,6 +985,14 @@ namespace nn {
 		const Tensor& a,
 		const Tensor& b,
 		std::function<float(float, float)> op) {
+		if (a.shape_ == b.shape_) {
+			Tensor result(a.shape_);
+			for (size_t i = 0;i < result.size();i++) {
+				result.data_ptr()[i] = op(a.data_ptr()[i], b.data_ptr()[i]);
+			}
+			return result;
+		}
+
 		auto result_shape = broadcast_shape(a.shape_, b.shape_);
 		Tensor result(result_shape);
 		size_t total = result.size();

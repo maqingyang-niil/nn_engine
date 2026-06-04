@@ -72,3 +72,5 @@ Testing/
 *.filters
 *.user
 x64/
+
+source/main.cpp
