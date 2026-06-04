@@ -96,6 +96,48 @@ namespace nn {
 		return x;
 	}
 
+	//BatchNorm
+	BatchNorm::BatchNorm(size_t num_features, float momentum, float epsilon)
+		:num_features_(num_features), momentum_(momentum), epsilon_(epsilon) {
+		gamma_ = Tensor::ones({ num_features_ });
+		beta_ = Tensor::zeros({ num_features_ });
+		running_mean_ = Tensor::zeros({ num_features });
+		running_var_ = Tensor::ones({ num_features });
+
+		gamma_.set_requires_grad(true);
+		beta_.set_requires_grad(true);
+	}
+
+	Tensor BatchNorm::forward(const Tensor& input) {
+		Tensor mean, var, x_hat;
+
+		if (training_) {
+			mean = input.mean(0);
+			Tensor diff = input - mean;
+			var = (diff * diff).mean(0);
+			x_hat = diff / (var + epsilon_).sqrt();
+
+			float* rm = running_mean_.data_ptr();
+			float* rv = running_var_.data_ptr();
+			const float* m = mean.data_ptr();
+			const float* v = var.data_ptr();
+			for (size_t i = 0; i < num_features_; i++) {
+				rm[i] = (1.0f - momentum_) * rm[i] + momentum_ * m[i];
+				rv[i] = (1.0f - momentum_) * rv[i] + momentum_ * v[i];
+			}
+		}
+		else {
+			x_hat = (input - running_mean_) / (running_var_ + epsilon_).sqrt();
+		}
+
+		return gamma_ * x_hat + beta_;
+	}
+
+	std::vector<Tensor*> BatchNorm::parameters() {
+		return { &gamma_,&beta_ };
+	}
+
+	//Sequential
 	std::vector<Tensor*> Sequential::parameters() {
 		std::vector<Tensor*> params;
 		for (auto& layer : layers_) {
