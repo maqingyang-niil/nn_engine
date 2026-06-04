@@ -8,10 +8,9 @@ namespace nn {
 
 	void SGD::step() {
 		for (auto* param : params_) {
-			if (!param->grad()) continue;
-			Tensor updated = *param - lr_ * (*param->grad());
+			if (!param->grad())continue;
 			for (size_t i = 0;i < param->size();i++) {
-				param->data_ptr()[i] = updated.data_ptr()[i];
+				param->data_ptr()[i] = param->data_ptr()[i] - lr_ * (param->grad()->data_ptr()[i]);
 			}
 		}
 	}
