@@ -3,6 +3,7 @@
 #include <unordered_set>
 #include <cblas.h>
 namespace nn {
+	bool Tensor::grad_enabled_ = true;
 	//构造
 	Tensor::Tensor()
 		:data_(std::make_shared<std::vector<float>>())
@@ -311,7 +312,7 @@ namespace nn {
 	Tensor Tensor::operator+(const Tensor& other) const {
 		Tensor result = elementwise_op(*this, other, [](float a, float b) {return a + b;});
 		
-		if (requires_grad_ || other.requires_grad_) {
+		if (grad_enabled_&&(requires_grad_ || other.requires_grad_)) {
 			auto fn = std::make_shared<AddBackward>(*this, other);
 			result.set_grad_fn(fn);
 			result.set_requires_grad(true);
@@ -321,7 +322,7 @@ namespace nn {
 	Tensor Tensor::operator-(const Tensor& other) const {
 		Tensor result = elementwise_op(*this, other, [](float a, float b) {return a - b;});
 
-		if (requires_grad_ || other.requires_grad_) {
+		if (grad_enabled_&&(requires_grad_ || other.requires_grad_)) {
 			auto fn = std::make_shared<SubBackward>(*this, other);
 			result.set_grad_fn(fn);
 			result.set_requires_grad(true);
@@ -330,7 +331,7 @@ namespace nn {
 	}
 	Tensor Tensor::operator*(const Tensor& other) const {
 		Tensor result = elementwise_op(*this, other, [](float a, float b) {return a * b;});
-		if (requires_grad_ || other.requires_grad_) {
+		if (grad_enabled_&&(requires_grad_ || other.requires_grad_)) {
 			auto fn = std::make_shared<MulBackward>(*this, other);
 			result.set_grad_fn(fn);
 			result.set_requires_grad(true);
@@ -340,7 +341,7 @@ namespace nn {
 	Tensor Tensor::operator/(const Tensor& other) const {
 		Tensor result = elementwise_op(*this, other, [](float a, float b) {return a / b;});
 
-		if (requires_grad_ || other.requires_grad_) {
+		if (grad_enabled_&&(requires_grad_ || other.requires_grad_)) {
 			auto fn = std::make_shared<DivBackward>(*this, other);
 			result.set_grad_fn(fn);
 			result.set_requires_grad(true);
@@ -354,7 +355,7 @@ namespace nn {
 		for (size_t i = 0; i < size(); i++) {
 			(*result.data_)[i] = -(*data_)[offset_ + i]; 
 		}
-		if (requires_grad_) {
+		if (requires_grad_&&grad_enabled_) {
 			auto fn = std::make_shared<NegBackward>(*this);
 			result.set_grad_fn(fn);
 			result.set_requires_grad(true);
@@ -369,7 +370,7 @@ namespace nn {
 		for (size_t i = 0;i < size();i++) {
 			(*result.data_)[i] = (*data_)[offset_ + i]+scalar;
 		}
-		if (requires_grad_) {
+		if (requires_grad_&&grad_enabled_) {
 			auto fn = std::make_shared<AddScalarBackward>(scalar, *this);
 			result.set_grad_fn(fn);
 			result.set_requires_grad(true);
@@ -381,7 +382,7 @@ namespace nn {
 		for (size_t i = 0;i < size();i++) {
 			(*result.data_)[i] = (*data_)[offset_ + i] - scalar;
 		}
-		if (requires_grad_) {
+		if (requires_grad_&&grad_enabled_) {
 			auto fn = std::make_shared<LSubScalarBackward>(scalar, *this);
 			result.set_grad_fn(fn);
 			result.set_requires_grad(true);
@@ -393,7 +394,7 @@ namespace nn {
 		for (size_t i = 0;i < size();i++) {
 			(*result.data_)[i] = (*data_)[offset_ + i] * scalar;
 		}
-		if (requires_grad_) {
+		if (requires_grad_&&grad_enabled_) {
 			auto fn = std::make_shared<MulScalarBackward>(scalar, *this);
 			result.set_grad_fn(fn);
 			result.set_requires_grad(true);
@@ -405,7 +406,7 @@ namespace nn {
 		for (size_t i = 0;i < size();i++) {
 			(*result.data_)[i] = (*data_)[offset_ + i] / scalar;
 		}
-		if (requires_grad_) {
+		if (requires_grad_&&grad_enabled_) {
 			auto fn = std::make_shared<LDivScalarBackward>(scalar, *this);
 			result.set_grad_fn(fn);
 			result.set_requires_grad(true);
@@ -422,7 +423,7 @@ namespace nn {
 		for (size_t i = 0; i < t.size(); ++i) {
 			(*result.data_)[i] = scalar - (*t.data_)[t.offset_ + i];
 		}
-		if (t.requires_grad()) {
+		if (t.requires_grad()&&t.grad_enabled_) {
 			auto fn = std::make_shared<RSubScalarBackward>(scalar, t);
 			result.set_grad_fn(fn);
 			result.set_requires_grad(true);
@@ -437,7 +438,7 @@ namespace nn {
 		for (size_t i = 0; i < t.size(); ++i) {
 			(*result.data_)[i] = scalar / (*t.data_)[t.offset_ + i];
 		}
-		if (t.requires_grad()) {
+		if (t.requires_grad()&&t.grad_enabled_) {
 			auto fn = std::make_shared<RDivScalarBackward>(scalar, t);
 			result.set_grad_fn(fn);
 			result.set_requires_grad(true);
@@ -481,7 +482,7 @@ namespace nn {
 			1.0f, data_ptr(), lda, other.data_ptr(), ldb,
 			0.0f, result.data_ptr(), static_cast<int>(N));
 
-		if (requires_grad_ || other.requires_grad_) {
+		if (grad_enabled_&&(requires_grad_ || other.requires_grad_)) {
 			auto fn = std::make_shared<MatMulBackward>(*this, other);
 			result.set_grad_fn(fn);
 			result.set_requires_grad(true);
@@ -823,6 +824,7 @@ namespace nn {
 	void Tensor::backward() {
 		set_grad(std::make_shared<Tensor>(Tensor::ones(shape_)));
 
+		grad_enabled_ = false;
 		std::vector<Tensor*> topo;
 		std::unordered_set<Tensor*> visited;
 
@@ -855,6 +857,7 @@ namespace nn {
 				}
 			}
 		}
+		grad_enabled_ = true;
 	}
 
 	//切片
@@ -874,6 +877,11 @@ namespace nn {
 			result.data_ptr()[i] = src[i];
 		}
 		return result;
+	}
+
+	//是否开启梯度追踪
+	bool Tensor::grad_enabled() {
+		return grad_enabled_ == true;
 	}
 
 	/*

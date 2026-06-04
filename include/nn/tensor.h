@@ -202,6 +202,9 @@ namespace nn {
 		//切片
 		Tensor slice(size_t start, size_t end) const;
 
+		//是否开启梯度追踪
+		bool grad_enabled();
+
 		
 		/*
 		mnist相关
@@ -211,6 +214,7 @@ namespace nn {
 		~Tensor()=default;
 
 	private:
+		//状态数据信息
 		std::shared_ptr<std::vector<float>> data_;
 		std::vector<size_t> shape_;
 		std::vector<size_t> strides_;
@@ -220,6 +224,9 @@ namespace nn {
 		bool requires_grad_ = false;
 		std::shared_ptr<std::shared_ptr<Tensor>> grad_;
 		std::shared_ptr<Autograd> grad_fn_;
+
+		//是否开启梯度追踪
+		static bool grad_enabled_;
 
 		// 根据 shape 计算 strides
 		void compute_strides();
