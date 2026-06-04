@@ -22,8 +22,10 @@ int main() {
     nn::Sequential model({
         std::make_shared<nn::Linear>(784, 128),
         std::make_shared<nn::ReLU>(),
+        std::make_shared<nn::Dropout>(0.2f),
         std::make_shared<nn::Linear>(128, 64),
         std::make_shared<nn::ReLU>(),
+        std::make_shared<nn::Dropout>(0.2f),
         std::make_shared<nn::Linear>(64, 10),
         std::make_shared<nn::Softmax>()
         });
@@ -34,10 +36,11 @@ int main() {
     // ========== 训练 ==========
     size_t batch_size = 64;
     size_t num_batches = train_images.shape()[0] / batch_size;
-    int epochs = 5;
+    int epochs = 10;
 
     for (int epoch = 0; epoch < epochs; epoch++) {
         float total_loss = 0.0f;
+        model.train();
 
         for (size_t b = 0; b < num_batches; b++) {
             size_t start = b * batch_size;
@@ -64,6 +67,7 @@ int main() {
             << " Avg Loss: " << total_loss / num_batches << "\n";
 
         // ========== 测试准确率 ==========
+        model.eval();
         int correct = 0;
         size_t test_batches = test_images.shape()[0] / batch_size;
 

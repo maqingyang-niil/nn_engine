@@ -31,12 +31,23 @@ namespace nn {
 	public:
 		Tensor forward(const Tensor& input)override;
 	};
+
+	class Dropout :public Module {
+	public:
+		Dropout(float drop_prob = 0.2);
+		Tensor forward(const Tensor& input)override;
+	private:
+		float drop_prob_;
+	};
+
 	//Sequential
 	class Sequential :public Module {
 	public:
 		Sequential(std::vector<std::shared_ptr<Module>> layers);
 		Tensor forward(const Tensor& input)override;
 		std::vector<Tensor*> parameters() override;
+		void train()override;
+		void eval()override;
 	private:
 		std::vector<std::shared_ptr<Module>> layers_;
 	};

@@ -279,6 +279,7 @@ namespace nn {
 		}
 	};
 
+	//Softmax求导
 	class SoftmaxBackward :public Autograd {
 	public:
 		Tensor output_;
@@ -289,6 +290,21 @@ namespace nn {
 			Tensor sg = grad_output * output_;
 			Tensor sum_sg = sg.sum(1, true);
 			return { output_ * (grad_output - sum_sg) };
+		}
+	};
+
+	//Dropout求导
+	class DropoutBackward :public Autograd {
+	public:
+		Tensor mask_;
+		float keep_prob_;
+		DropoutBackward(const Tensor& input, const Tensor& mask, float keep_prob)
+			:mask_(mask), keep_prob_(keep_prob) {
+			saved_inputs.push_back(input);
+		}
+
+		std::vector<Tensor> backward(const Tensor& grad_output)override {
+			return { grad_output * mask_ / keep_prob_ };
 		}
 	};
 }
