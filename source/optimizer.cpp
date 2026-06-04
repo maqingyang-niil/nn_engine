@@ -29,30 +29,27 @@ namespace nn {
 			v_.push_back(Tensor::zeros(p->shape()));
 		}
 	}
+
 	void Adam::step() {
 		t_++;
+		float bias_correction1 = 1.0f - std::pow(beta1_, t_);
+		float bias_correction2 = 1.0f - std::pow(beta2_, t_);
+
 		for (size_t i = 0;i < params_.size();i++) {
 			auto* param = params_[i];
 			if (!param->grad()) continue;
 
-			Tensor grad = *param->grad();
-			m_[i] = beta1_ * m_[i] + (1.0f - beta1_) * grad;
-			v_[i] = beta2_ * v_[i] + (1.0f - beta2_) * grad * grad;
-
-			float bias_correction1 = 1.0f - std::pow(beta1_, t_);
-			float bias_correction2 = 1.0f - std::pow(beta2_, t_);
-
-			Tensor m_hat = m_[i] / bias_correction1;
-			Tensor v_hat = v_[i] / bias_correction2;
-
-			Tensor updated= *param - lr_ * m_hat / (v_hat.sqrt() + epsilon_);
-
 			for (size_t j = 0;j < param->size();j++) {
-				param->data_ptr()[j] = updated.data_ptr()[j];
+				m_[i].data_ptr()[j] = beta1_ * m_[i].data_ptr()[j] + (1.0f - beta1_) * (param->grad()->data_ptr()[j]);
+				v_[i].data_ptr()[j] = beta2_ * v_[i].data_ptr()[j] + (1.0f - beta2_) * (param->grad()->data_ptr()[j]) * (param->grad()->data_ptr()[j]);
+				float m_hat = m_[i].data_ptr()[j] / bias_correction1;
+				float v_hat = v_[i].data_ptr()[j] / bias_correction2;
+				param->data_ptr()[j] -= lr_ * m_hat / (std::sqrt(v_hat) + epsilon_);
 			}
 		}
 		
 	}
+
 	void Adam::zero_grad() {
 		for (auto* param : params_) {
 			param->set_grad(nullptr);
