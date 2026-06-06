@@ -129,7 +129,6 @@ namespace nn {
 		else {
 			x_hat = (input - running_mean_) / (running_var_ + epsilon_).sqrt();
 		}
-
 		return gamma_ * x_hat + beta_;
 	}
 
@@ -159,6 +158,20 @@ namespace nn {
 		for (auto& layer : layers_) {
 			layer->eval();
 		}
+	}
+
+	//Flatten
+	Tensor Flatten::forward(const Tensor& input) {
+		size_t batch = input.shape()[0];
+		size_t feature = input.size() / batch;
+		Tensor result = input.reshape({ batch,feature });
+
+		if (input.requires_grad()) {
+			auto fn = std::make_shared<FlattenBackward>(input);
+			result.set_grad_fn(fn);
+			result.set_requires_grad(true);
+		}
+		return result;
 	}
 
 }

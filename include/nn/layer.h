@@ -69,5 +69,9 @@ namespace nn {
 	private:
 		std::vector<std::shared_ptr<Module>> layers_;
 	};
-	
+	//Flatten
+	class Flatten :public Module {
+	public:
+		Tensor forward(const Tensor& input)override;
+	};
 }
