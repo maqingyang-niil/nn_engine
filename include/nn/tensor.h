@@ -211,6 +211,11 @@ namespace nn {
 		*/
 		static Tensor one_hot(const std::vector<int>& labels, size_t num_classes);
 
+		//ConV2相关
+		static Tensor im2col(const Tensor& input, size_t kH, size_t kW);
+		static Tensor col2im(const Tensor& col, const std::vector<size_t>& input_shape, size_t kH, size_t kW);
+
+
 		~Tensor()=default;
 
 	private:

@@ -74,4 +74,25 @@ namespace nn {
 	public:
 		Tensor forward(const Tensor& input)override;
 	};
+	//Conv2d
+	class Conv2d : public Module {
+	public:
+		Conv2d(size_t in_channels, size_t out_channels, size_t kernel_size);
+		Tensor forward(const Tensor& input) override;
+		std::vector<Tensor*> parameters() override;
+	private:
+		size_t in_channels_;
+		size_t out_channels_;
+		size_t kernel_size_;
+		Tensor weight_;
+		Tensor bias_;
+	};
+	//MaxPool2d
+	class MaxPool2d : public Module {
+	public:
+		MaxPool2d(size_t pool_size);
+		Tensor forward(const Tensor& input) override;
+	private:
+		size_t pool_size_;
+	};
 }

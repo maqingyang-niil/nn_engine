@@ -898,6 +898,64 @@ namespace nn {
 		return result;
 	}
 
+	//ConV2相关
+	Tensor Tensor::im2col(const Tensor& input, size_t kH, size_t kW) {
+		size_t batch = input.shape()[0];
+		size_t C = input.shape()[1];
+		size_t H = input.shape()[2];
+		size_t W = input.shape()[3];
+		size_t outH = H - kH + 1;
+		size_t outW = W - kW + 1;
+		size_t rows = batch * outH * outW;
+		size_t cols = C * kH * kW;
+		std::vector<float> data(rows * cols);
+		for (size_t n = 0;n < batch;n++) {
+			for (size_t oh = 0;oh < outH;oh++) {
+				for (size_t ow = 0;ow < outW;ow++) {
+					size_t row = n * outH * outW + oh * outW + ow;
+					for (size_t c = 0;c < C;c++) {
+						for (size_t kh = 0;kh < kH;kh++) {
+							for (size_t kw = 0; kw < kW; kw++) {
+								size_t col = c * kH * kW + kh * kW + kw;
+								data[row * cols + col] =
+									input.data_ptr()[n * C * H * W + c * H * W + (oh + kh) * W + (ow + kw)];
+							}
+						}
+					}
+				}
+			}
+		}
+		return Tensor({ rows,cols }, data);
+	}
+
+	Tensor Tensor::col2im(const Tensor& col, const std::vector<size_t>& input_shape, size_t kH, size_t kW) {
+		size_t batch = input_shape[0];
+		size_t C = input_shape[1];
+		size_t H = input_shape[2];
+		size_t W = input_shape[3];
+		size_t outH = H - kH + 1;
+		size_t outW = W - kW + 1;
+		size_t cols = C * kH * kW;
+		std::vector<float> data(batch * C * H * W, 0.0f);
+		for (size_t n = 0; n < batch; n++) {
+			for (size_t oh = 0; oh < outH; oh++) {
+				for (size_t ow = 0; ow < outW; ow++) {
+					size_t row = n * outH * outW + oh * outW + ow;
+					for (size_t c = 0; c < C; c++) {
+						for (size_t kh = 0; kh < kH; kh++) {
+							for (size_t kw = 0; kw < kW; kw++) {
+								size_t col_idx = c * kH * kW + kh * kW + kw;
+								data[n * C * H * W + c * H * W + (oh + kh) * W + (ow + kw)]+= col.data_ptr()[row * cols + col_idx];
+							}
+						}
+					}
+				}
+			}
+		}
+
+		return Tensor(input_shape, data);
+	}
+
 	//计算步长
 	void Tensor::compute_strides() {
 		strides_.resize(shape_.size());
